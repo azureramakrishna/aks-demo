@@ -29,11 +29,11 @@ jobs:
     - name: Build and push image to ACR
       id: build-image
       run: |
+        IMAGE_TAG=$(date +%Y%m%d-%H%M%S)
         az acr build --registry ${{ env.ACR_NAME }} \
-          --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
-          --image ${{ env.IMAGE_NAME }}:latest \
+          --image ${{ env.IMAGE_NAME }}:${IMAGE_TAG} \
           --file Dockerfile .
-        echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
 
   release:
     runs-on: ubuntu-latest
@@ -50,12 +50,20 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+    - name: Install kubelogin
+      run: |
+        curl -LO https://github.com/Azure/kubelogin/releases/download/v0.0.32/kubelogin-linux-amd64.zip
+        unzip kubelogin-linux-amd64.zip
+        sudo mv bin/linux_amd64/kubelogin /usr/local/bin/
+        sudo chmod +x /usr/local/bin/kubelogin
+
     - name: Set AKS context
-      uses: azure/aks-set-context@v3
-      with:
-        resource-group: ${{ env.AKS_RESOURCE_GROUP }}
-        cluster-name: ${{ env.AKS_CLUSTER }}
-        admin: false
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.AKS_RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER }} \
+          --overwrite-existing
+        kubelogin convert-kubeconfig -l azurecli
 
     - name: Deploy to AKS
       run: |
