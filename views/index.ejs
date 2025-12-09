@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AKS Task Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 AKS Task Manager</h1>
+      <p class="subtitle">Running on Azure Kubernetes Service</p>
+    </header>
+
+    <div class="add-task">
+      <form action="/tasks" method="POST">
+        <input type="text" name="title" placeholder="Add a new task..." required>
+        <button type="submit">Add Task</button>
+      </form>
+    </div>
+
+    <div class="tasks">
+      <% if (tasks.length === 0) { %>
+        <p class="no-tasks">No tasks yet. Add one above!</p>
+      <% } else { %>
+        <% tasks.forEach(task => { %>
+          <div class="task <%= task.completed ? 'completed' : '' %>">
+            <form action="/tasks/<%= task.id %>/toggle" method="POST" style="display: inline;">
+              <button type="submit" class="toggle-btn">
+                <%= task.completed ? '✓' : '○' %>
+              </button>
+            </form>
+            <span class="task-title"><%= task.title %></span>
+            <form action="/tasks/<%= task.id %>/delete" method="POST" style="display: inline;">
+              <button type="submit" class="delete-btn">🗑️</button>
+            </form>
+          </div>
+        <% }) %>
+      <% } %>
+    </div>
+
+    <footer>
+      <p>Total Tasks: <%= tasks.length %> | Completed: <%= tasks.filter(t => t.completed).length %></p>
+    </footer>
+  </div>
+</body>
+</html>
