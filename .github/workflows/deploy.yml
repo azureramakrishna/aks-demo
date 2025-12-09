@@ -1,0 +1,76 @@
+name: Build and Deploy to AKS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ACR_NAME: saanvikit
+  AKS_CLUSTER: saanvikit-aks
+  AKS_RESOURCE_GROUP: k8s-group
+  IMAGE_NAME: aks-demo-app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.build-image.outputs.tag }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        az acr build --registry ${{ env.ACR_NAME }} \
+          --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          --image ${{ env.IMAGE_NAME }}:latest \
+          --file Dockerfile .
+        echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.AKS_RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER }} \
+          --overwrite-existing
+
+    - name: Deploy to AKS
+      run: |
+        echo "🔧 Updating deployment manifest..."
+        sed -i "s|<ACR_NAME>|${{ env.ACR_NAME }}|g" k8s/deployment.yaml
+        cat k8s/deployment.yaml
+        echo "📦 Applying Kubernetes resources..."
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        echo "🖼️ Updating container image..."
+        kubectl set image deployment/aks-demo-app -n saanvikit \
+          aks-demo-app=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image-tag }}
+        echo "🔄 Restarting deployment..."
+        kubectl rollout restart deployment/aks-demo-app -n saanvikit
+        echo "⏳ Waiting for rollout to complete..."
+        kubectl rollout status deployment/aks-demo-app -n saanvikit
+        echo "✅ Deployment successful!"
